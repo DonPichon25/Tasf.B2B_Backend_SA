@@ -14,16 +14,17 @@ public class SimulatedAnnealingPlanner {
     private double factorEnfriamiento = 0.95;
 
     // Diccionario para buscar vuelos rápido: { "LIM": [Vuelo1, Vuelo2...], "BOG": [...] }
-    private Map<String, List<Vuelo>> vuelosPorOrigen;
+    private Map<String, List<Vuelo>> vuelosPorOrigen; //para la respuesta
 
     public SimulatedAnnealingPlanner(List<Vuelo> todosLosVuelos) {
         this.vuelosPorOrigen = agruparVuelos(todosLosVuelos);
     }
 
-    private Map<String, List<Vuelo>> agruparVuelos(List<Vuelo> vuelos) {
+    private Map<String, List<Vuelo>> agruparVuelos(List<Vuelo> vuelos) { //devuelve un map con lista de vuelos
         Map<String, List<Vuelo>> mapa = new HashMap<>();
         for (Vuelo v : vuelos) {
-            mapa.computeIfAbsent(v.getAeropuertoOrigen().getCodigoIATA(), k -> new ArrayList<>()).add(v);
+            mapa.computeIfAbsent(v.getAeropuertoOrigen().getCodigoIATA(), k -> new ArrayList<>()).add(v);//k es la llave
+            //búscame la lista de vuelos para este código, Si buscas 'LIM' y no hay, crea una lista vacía, luego agregas el vuelo a la lista
         }
         return mapa;
     }
@@ -31,11 +32,11 @@ public class SimulatedAnnealingPlanner {
     /**
      * MÉTODO PRINCIPAL DEL ALGORITMO
      */
-    public PlanViaje planificarRuta(Pedido pedido) {
+    public PlanViaje planificarRuta(Pedido pedido) {//recibe un pedido no más
         System.out.println("--- Iniciando Simulated Annealing para Pedido: " + pedido.getExternalId() + " ---");
 
         // 1. Generar una solución inicial (Puede ser subóptima)
-        List<Vuelo> rutaActual = generarRutaInicialAleatoria(pedido);
+        List<Vuelo> rutaActual = generarRutaInicialAleatoria(pedido); //se genera una solución
         double energiaActual = calcularEnergia(rutaActual, pedido);
 
         // Variables para guardar la mejor ruta histórica
@@ -129,26 +130,26 @@ public class SimulatedAnnealingPlanner {
     }
 
     // --- MÉTODOS AUXILIARES  ---
-    private List<Vuelo> generarRutaInicialAleatoria(Pedido pedido) {
-        String origen = pedido.getAeropuertoOrigenCodigo();
+    private List<Vuelo> generarRutaInicialAleatoria(Pedido pedido) {//Recibe el pedido
+        String origen = pedido.getAeropuertoOrigenCodigo();//código aeropuerto de origen y destino
         String destino = pedido.getAeropuertoDestinoCodigo();
-
-        List<Vuelo> salidas = vuelosPorOrigen.getOrDefault(origen, new ArrayList<>());
-        if (salidas.isEmpty()) return new ArrayList<>();
-
+      //lista de vuelos, la variable global de vuelos por origen //la variable que busco es origen
+        List<Vuelo> salidas = vuelosPorOrigen.getOrDefault(origen, new ArrayList<>()); //Si existe en el diccionario y tiene vuelos devuelve esa lista busca todos los vuelos que parten del origen
+        if (salidas.isEmpty()) return new ArrayList<>(); // si no encuentra devuelve una lista vacía
+        // Si está vacío la variable global retorna una nueva lista vacía
         // 1. Intentar vuelo directo rápido
-        for (Vuelo v : salidas) {
-            if (v.getAeropuertoDestino().getCodigoIATA().equals(destino)) {
-                return new ArrayList<>(Collections.singletonList(v));
+        for (Vuelo v : salidas) { // los vuelos de salida se sacan uno a uno
+            if (v.getAeropuertoDestino().getCodigoIATA().equals(destino)) {//Se saca el codigo del destino y lo compara al destino que estamos buscando
+                return new ArrayList<>(Collections.singletonList(v)); //lista para tener solo un elemento estático (vuelo directo)
             }
         }
 
         // 2. Si no hay directo, buscar 1 escala aleatoria
-        List<Vuelo> salidasAleatorias = new ArrayList<>(salidas);
-        Collections.shuffle(salidasAleatorias); // Mezclar para dar variedad
+        List<Vuelo> salidasAleatorias = new ArrayList<>(salidas); // Todos los vuelos que parten del origen, se crea uan lista
+        Collections.shuffle(salidasAleatorias); // Mezcla lista salidasAleatorias los cambia de posición al azar.
 
-        for (Vuelo v1 : salidasAleatorias) {
-            String escala = v1.getAeropuertoDestino().getCodigoIATA();
+        for (Vuelo v1 : salidasAleatorias) {//para cada vuelo en salidas aleatorias
+            String escala = v1.getAeropuertoDestino().getCodigoIATA(); //guardamos el código de destino
             List<Vuelo> conexiones = vuelosPorOrigen.getOrDefault(escala, new ArrayList<>());
 
             List<Vuelo> conexionesAleatorias = new ArrayList<>(conexiones);

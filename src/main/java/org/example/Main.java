@@ -72,6 +72,25 @@ public class Main implements CommandLineRunner {
         if (todosLosPedidos != null && !todosLosPedidos.isEmpty()) {
             System.out.println(">> Total de pedidos en cola para enrutamiento: " + todosLosPedidos.size());
 
+            // --- NUEVO: ORDENAR LA COLA DE PEDIDOS (Estrategia Greedy) ---
+            // --- ORDENAMIENTO INTELIGENTE (Estrategia EDF: Earliest Deadline First) ---
+            System.out.println(">> Ordenando pedidos por urgencia de entrega (SLA)...");
+
+            todosLosPedidos.sort((p1, p2) -> {
+                // 1er Criterio Absoluto: La Fecha Límite de Entrega.
+                // El paquete que caduca antes, pasa primero al frente de la fila.
+                int comparacionFechaLimite = p1.getFechaLimiteEntrega().compareTo(p2.getFechaLimiteEntrega());
+
+                if (comparacionFechaLimite != 0) {
+                    return comparacionFechaLimite;
+                }
+
+                // 2do Criterio (Desempate): Si mágicamente dos pedidos vencen en el mismo
+                // milisegundo, le damos prioridad al que tiene el SLA más estricto (1.0).
+                return Double.compare(p2.getPrioridad(), p1.getPrioridad());
+            });
+            // -------------------------------------------------------------
+
             // 5.1 Instanciamos el algoritmo pasándole todos los vuelos del mundo
             SimulatedAnnealingPlanner sa = new SimulatedAnnealingPlanner(vuelos);
 

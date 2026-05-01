@@ -96,7 +96,7 @@ public class SimulatedAnnealingPlanner {
                         "(Usada/Max): " + nuevaCapacidadUsada + "/" + v.getCapacidadMaxima());
             }
         }
-        return construirPlanViaje(pedido, mejorRuta); //Se construye la mejorRuta para el pedio
+        return construirPlanViaje(pedido, mejorRuta,mejorEnergia); //Se construye la mejorRuta para el pedio
     }
 
     /**
@@ -104,43 +104,70 @@ public class SimulatedAnnealingPlanner {
      * Evalúa qué tan buena es una ruta. A menor energía, mejor.
      */
     private double calcularEnergia(List<Vuelo> ruta, Pedido pedido) {
-        if (ruta == null || ruta.isEmpty()) return Double.MAX_VALUE; // Ruta inválida
+        if (ruta == null || ruta.isEmpty()) return Double.MAX_VALUE;
 
         double energia = 0.0;
 
-        // 1. Validar conexión física (Que el destino de V1 sea origen de V2)
+        // 1. Validaciones letales (Las mismas reglas estrictas para ambos)
         for (int i = 0; i < ruta.size() - 1; i++) {
             Vuelo vActual = ruta.get(i);
             Vuelo vSiguiente = ruta.get(i+1);
 
-            //Navegamos dentro del objeto Aeropuerto
-            if (!vActual.getAeropuertoDestino().getCodigoIATA().equals(vSiguiente.getAeropuertoOrigen().getCodigoIATA())) {// si eld estino del primero no es igual al inicio dle segundo
-                return 999999.0; // Penalidad letal por teletransportación
+            // Evitar teletransportación
+            if (!vActual.getAeropuertoDestino().getCodigoIATA().equals(vSiguiente.getAeropuertoOrigen().getCodigoIATA())) {
+                return 999999.0;
             }
 
-            //  Usamos getHoraSalida() y getHoraLlegada() (LocalTime)
-            // Validamos que el vuelo 2 salga DESPUÉS de que llegue el vuelo 1 (asumiendo mismo día para este MVP)
-            if (vSiguiente.getHoraSalida().isBefore(vActual.getHoraLlegada())) {// salida del segundo vuelo es antes de la llegada del primero
-                return 999999.0; // Penalidad letal por viaje en el tiempo
+            // Regla de Conexión Física: Mínimo 10 minutos de transbordo
+            long minutosEscala = java.time.temporal.ChronoUnit.MINUTES.between(
+                    vActual.getHoraLlegada(), vSiguiente.getHoraSalida());
+            if (minutosEscala < 0) {
+                minutosEscala += (24 * 60);
+            }
+            if (minutosEscala < 10) {
+                return 999999.0; // Castigo letal: Física imposible
             }
         }
 
-        // 3. Calcular tiempo total del viaje
-        LocalTime salidaInicial = ruta.get(0).getHoraSalida();// hora de salida del primero en la lista
-        LocalTime llegadaFinal = ruta.get(ruta.size() - 1).getHoraLlegada(); //llegada del ultimo en la lista
-        long horasViaje = java.time.temporal.ChronoUnit.HOURS.between(salidaInicial, llegadaFinal);
-        if (horasViaje < 0) {//horas de viaje son menos que 0
-            horasViaje += 24; //le suma 24 horas al viaje
-        }
-        energia += horasViaje; // La base de la energía son las horas
+        // --- 2. CÁLCULO DE TIEMPO EN MINUTOS (Igualando la escala del Tabu Search) ---
+        double minutosTotalesViaje = 0.0;
 
-        // 4. Penalidad por SLA (24h o 48h) de Tasf.B2B
-        long limiteSLA = Duration.between(pedido.getFechaPedido(), pedido.getFechaLimiteEntrega()).toHours(); // fecha del pedido y fecha límite entrega, el intervalo
-        if (horasViaje > limiteSLA) {//las horas de viaje pasan al limiteSLA
-            energia += 5000.0; // Fuerte penalidad si no llega a tiempo
+        for (int i = 0; i < ruta.size(); i++) {
+            Vuelo vActual = ruta.get(i);
+
+            // A. Sumar tiempo físico en el aire
+            // Como tu getTiempoTransporte() devuelve horas (ej: 1.5), lo multiplicamos por 60 para tener minutos (90.0)
+            minutosTotalesViaje += (vActual.getTiempoTransporte() * 60.0);
+
+            // B. Sumar tiempo de espera en la escala
+            if (i < ruta.size() - 1) {
+                Vuelo vSiguiente = ruta.get(i + 1);
+                long minutosEscala = java.time.temporal.ChronoUnit.MINUTES.between(
+                        vActual.getHoraLlegada(), vSiguiente.getHoraSalida());
+
+                if (minutosEscala < 0) {
+                    minutosEscala += (24 * 60);
+                }
+                minutosTotalesViaje += minutosEscala; // Sumado directo en minutos
+            }
         }
 
-        return energia; //se retorna la energía
+        // C. Regla 6: Sumar 10 minutos de recojo en almacén
+        minutosTotalesViaje += 10.0;
+
+        // La base del fitness (energía) ahora son los minutos reales
+        energia += minutosTotalesViaje;
+
+        // --- 3. PENALIZACIÓN POR SLA ---
+        // Obtenemos los minutos máximos permitidos calculando la diferencia entre tus fechas
+        long limiteSLAMinutos = java.time.Duration.between(pedido.getFechaPedido(), pedido.getFechaLimiteEntrega()).toMinutes();
+
+        if (minutosTotalesViaje > limiteSLAMinutos) {
+            // Aplicamos exactamente el mismo castigo que tu compañera
+            energia += 5000.0;
+        }
+
+        return energia;
     }
 
     // --- MÉTODOS AUXILIARES  ---
@@ -198,8 +225,21 @@ public class SimulatedAnnealingPlanner {
             }
 
             // REGLA B: El vuelo debe salir DESPUÉS de que el vuelo anterior haya llegado
-            if (horaLlegadaPrevia != null && vuelo.getHoraSalida().isBefore(horaLlegadaPrevia)) {
-                continue;
+            // --- 👇 REGLA B MODIFICADA (Reemplazo) 👇 ---
+            // El vuelo de conexión debe respetar los 10 minutos de transbordo (MCT)
+            if (horaLlegadaPrevia != null) {
+                long minutosEscala = java.time.temporal.ChronoUnit.MINUTES.between(
+                        horaLlegadaPrevia, vuelo.getHoraSalida());
+
+                // Ajuste por si la escala cruza la medianoche
+                if (minutosEscala < 0) {
+                    minutosEscala += (24 * 60);
+                }
+
+                // Si hay menos de 10 minutos entre llegada y salida, saltamos este vuelo
+                if (minutosEscala < 10) {
+                    continue;
+                }
             }
             // --- 3. NUEVO: VALIDACIÓN ESTRICTA DE CAPACIDAD ---
             // Calculamos el espacio disponible restando lo usado a lo máximo
@@ -240,18 +280,42 @@ public class SimulatedAnnealingPlanner {
     }
 
     // Nota: Cambia "PlanViaje" por "Ruta" aquí si decidiste usar la clase Ruta
-    private PlanViaje construirPlanViaje(Pedido pedido, List<Vuelo> mejorRuta) {
+    private PlanViaje construirPlanViaje(Pedido pedido, List<Vuelo> mejorRuta,double energiaFinal) {
         PlanViaje plan = new PlanViaje(); // O Ruta plan = new Ruta();
         plan.setAlgoritmoUsado("Simulated Annealing V1");
-
-        if (mejorRuta == null || mejorRuta.isEmpty()) {
+        // GUARDAMOS LA ENERGÍA PARA EL REPORTE
+        plan.setEnergiaCalculada(energiaFinal);
+        if (mejorRuta == null || mejorRuta.isEmpty()|| energiaFinal >= 999999.0) {
             plan.setEstado("CANCELADO");
+            plan.setDuracionTotalHoras(0.0);
             return plan;
         }
 
         // Llenar datos básicos para imprimir
         plan.setEstado("COMPLETADO");
         plan.setNumeroVuelos(mejorRuta.size());
+
+        // CALCULAMOS Y GUARDAMOS LAS HORAS TOTALES PARA EL REPORTE
+        // Calcular duración exacta sumando tiempos de transporte y escalas reales
+        double horasViaje = 0.0;
+        for (int i = 0; i < mejorRuta.size(); i++) {
+            Vuelo vActual = mejorRuta.get(i);
+            horasViaje += vActual.getTiempoTransporte();
+
+            if (i < mejorRuta.size() - 1) {
+                Vuelo vSiguiente = mejorRuta.get(i + 1);
+                long minutosEscala = java.time.temporal.ChronoUnit.MINUTES.between(
+                        vActual.getHoraLlegada(), vSiguiente.getHoraSalida());
+
+                if (minutosEscala < 0) {
+                    minutosEscala += (24 * 60);
+                }
+                horasViaje += (minutosEscala / 60.0);
+            }
+        }
+
+        plan.setDuracionTotalHoras(horasViaje);
+        ///////////////////////////////////////////////////
 
         System.out.println("✅ RUTA ENCONTRADA:");
         for (int i = 0; i < mejorRuta.size(); i++) {

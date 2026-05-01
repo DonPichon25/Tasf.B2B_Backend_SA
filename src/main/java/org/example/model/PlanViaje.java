@@ -19,6 +19,24 @@ public class PlanViaje {
     private Pedido pedido;
     private List<SegmentoVuelo> segmentosVuelo = new ArrayList<>();
 
+    private double energiaCalculada;
+    private double duracionTotalHoras;
+
+    public double getEnergiaCalculada() {
+        return energiaCalculada;
+    }
+
+    public void setEnergiaCalculada(double energiaCalculada) {
+        this.energiaCalculada = energiaCalculada;
+    }
+
+    public double getDuracionTotalHoras() {
+        return duracionTotalHoras;
+    }
+
+    public void setDuracionTotalHoras(double duracionTotalHoras) {
+        this.duracionTotalHoras = duracionTotalHoras;
+    }
     public void agregarSegmento(SegmentoVuelo segmento) {
         segmentosVuelo.add(segmento);
         segmento.setPlanViaje(this);

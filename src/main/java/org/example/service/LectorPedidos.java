@@ -156,7 +156,7 @@ public class LectorPedidos {
             String linea;
             int numeroLinea = 0;
             int contador = 0; ////////////////por memoria
-            while ((linea = reader.readLine() ) != null && contador < 10000) {
+            while ((linea = reader.readLine() ) != null && contador < 10) {
                 numeroLinea++;
                 linea = linea.trim();
 

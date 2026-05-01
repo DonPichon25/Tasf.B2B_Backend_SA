@@ -9,7 +9,9 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -93,16 +95,72 @@ public class Main implements CommandLineRunner {
 
             // 5.1 Instanciamos el algoritmo pasándole todos los vuelos del mundo
             SimulatedAnnealingPlanner sa = new SimulatedAnnealingPlanner(vuelos);
-
+            // 👉 LÍNEA NUEVA: Iniciamos el cronómetro justo antes del for
+            long tiempoInicioAlgoritmo = System.currentTimeMillis();
             // 5.2 Para esta primera prueba sacamos solo los primeros 100
             for (Pedido pedido : todosLosPedidos) {
 
                 System.out.println("\n>> 🚀 Buscando ruta para: " + pedido.getNombre() +
                         " (" + pedido.getAeropuertoOrigenCodigo() +
                         " -> " + pedido.getAeropuertoDestinoCodigo() + ")");
-
                 PlanViaje solucion = sa.planificarRuta(pedido);
+                // 👉 LÍNEAS NUEVAS: Guardamos la solución DENTRO del pedido
+                if (solucion != null) {
+                    pedido.setPlanesViaje(Collections.singletonList(solucion));
+                }
             }
+            long tiempoFinAlgoritmo = System.currentTimeMillis();
+            /////////////////////////////////GENERAR REPORTE EXPERIMENTACIÓN /////////////////////////////////////
+            ReporteGlobal reporte = new ReporteGlobal();
+            reporte.nombreAlgoritmo = "Recocido Simulado V1";
+            reporte.tiempoEjecucionMs = tiempoFinAlgoritmo - tiempoInicioAlgoritmo;
+            reporte.totalPedidos = todosLosPedidos.size();
+
+            for (Pedido p : todosLosPedidos) {
+                // Suponiendo que guardas el PlanViaje o Ruta dentro del Pedido
+                PlanViaje plan = p.getPlanesViaje() != null && !p.getPlanesViaje().isEmpty() ? p.getPlanesViaje().get(0) : null;
+
+                if (plan != null && plan.getEstado().equals("COMPLETADO")) {
+                    reporte.pedidosPlanificados++;
+
+                    // 1. Calcular horas de vuelo de este pedido
+                    double horasViaje = plan.getDuracionTotalHoras(); // Asegúrate de tener este método
+                    reporte.horasTotalesVuelo += horasViaje;
+
+                    // 2. Verificar si llegó a tiempo (SLA)
+                    // 2. Verificar si llegó a tiempo (SLA) - ¡AHORA EN MINUTOS!
+                    long limiteSLAMinutos = java.time.Duration.between(p.getFechaPedido(), p.getFechaLimiteEntrega()).toMinutes();
+                    double minutosViaje = horasViaje * 60.0;
+
+                    if (minutosViaje <= limiteSLAMinutos) {
+                        reporte.entregasATiempo++;
+                    } else {
+                        // 🚨 ¡ATRAPAMOS AL CULPABLE! Imprimimos quién es para investigarlo
+                        System.out.println("\n🚨 [ALERTA SLA] Pedido Tarde: " + p.getNombre() +
+                                " | Ruta: " + p.getAeropuertoOrigenCodigo() + " -> " + p.getAeropuertoDestinoCodigo());
+                        System.out.println("   - Límite SLA : " + (limiteSLAMinutos / 60.0) + " horas");
+                        System.out.println("   - Tiempo Real: " + horasViaje + " horas");
+                    }
+
+                    // 3. Sumar al fitness global (Suponiendo que guardas la energía en el plan)
+                    reporte.fitnessTotal += plan.getEnergiaCalculada(); // Asegúrate de guardar y obtener la energía
+                } else {
+                    // Si el pedido no se planificó, se suma una penalidad letal al fitness global
+                    reporte.fitnessTotal += 999999.0;
+                }
+            }
+
+            // Calcular Uso de Capacidad recorriendo los vuelos
+            for (Vuelo v : vuelos) {
+                if (v.getCapacidadUsada() > 0) {
+                    reporte.vuelosUtilizados++;
+                    reporte.capacidadTotalUtilizada += v.getCapacidadUsada();
+                    reporte.capacidadTotalDisponibleEnVuelosUsados += v.getCapacidadMaxima();
+                }
+            }
+
+            // Mostrar resultados
+            reporte.imprimirReporte();
 
         } else {
             System.err.println("❌ No hay pedidos en la memoria para procesar. Revisa la carga.");

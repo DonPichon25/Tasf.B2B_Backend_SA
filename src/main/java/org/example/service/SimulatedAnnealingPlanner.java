@@ -105,19 +105,15 @@ public class SimulatedAnnealingPlanner {
      */
     private double calcularEnergia(List<Vuelo> ruta, Pedido pedido) {
         if (ruta == null || ruta.isEmpty()) return Double.MAX_VALUE;
-
         double energia = 0.0;
-
         // 1. Validaciones letales (Las mismas reglas estrictas para ambos)
         for (int i = 0; i < ruta.size() - 1; i++) {
             Vuelo vActual = ruta.get(i);
             Vuelo vSiguiente = ruta.get(i+1);
-
             // Evitar teletransportación
             if (!vActual.getAeropuertoDestino().getCodigoIATA().equals(vSiguiente.getAeropuertoOrigen().getCodigoIATA())) {
                 return 999999.0;
             }
-
             // Regla de Conexión Física: Mínimo 10 minutos de transbordo
             long minutosEscala = java.time.temporal.ChronoUnit.MINUTES.between(
                     vActual.getHoraLlegada(), vSiguiente.getHoraSalida());
@@ -128,17 +124,13 @@ public class SimulatedAnnealingPlanner {
                 return 999999.0; // Castigo letal: Física imposible
             }
         }
-
         // --- 2. CÁLCULO DE TIEMPO EN MINUTOS (Igualando la escala del Tabu Search) ---
         double minutosTotalesViaje = 0.0;
-
         for (int i = 0; i < ruta.size(); i++) {
             Vuelo vActual = ruta.get(i);
-
             // A. Sumar tiempo físico en el aire
             // Como tu getTiempoTransporte() devuelve horas (ej: 1.5), lo multiplicamos por 60 para tener minutos (90.0)
             minutosTotalesViaje += (vActual.getTiempoTransporte() * 60.0);
-
             // B. Sumar tiempo de espera en la escala
             if (i < ruta.size() - 1) {
                 Vuelo vSiguiente = ruta.get(i + 1);
@@ -151,22 +143,17 @@ public class SimulatedAnnealingPlanner {
                 minutosTotalesViaje += minutosEscala; // Sumado directo en minutos
             }
         }
-
         // C. Regla 6: Sumar 10 minutos de recojo en almacén
         minutosTotalesViaje += 10.0;
-
         // La base del fitness (energía) ahora son los minutos reales
         energia += minutosTotalesViaje;
-
         // --- 3. PENALIZACIÓN POR SLA ---
         // Obtenemos los minutos máximos permitidos calculando la diferencia entre tus fechas
         long limiteSLAMinutos = java.time.Duration.between(pedido.getFechaPedido(), pedido.getFechaLimiteEntrega()).toMinutes();
-
         if (minutosTotalesViaje > limiteSLAMinutos) {
             // Aplicamos exactamente el mismo castigo que tu compañera
             energia += 5000.0;
         }
-
         return energia;
     }
 
@@ -183,7 +170,7 @@ public class SimulatedAnnealingPlanner {
 
         // Llamamos a la función recursiva. Le damos un límite de 5 vuelos máximo
         // para que no haga viajes absurdamente largos por todo el mundo.
-        int limiteVuelos = 5;
+        int limiteVuelos = 100;
 
         boolean exito = buscarRutaRecursiva(origen, destino, null, aeropuertosVisitados, rutaEncontrada, limiteVuelos,maletasDelPedido);
 
